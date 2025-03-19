@@ -102,6 +102,20 @@ class ParticleFilter(Node):
 
         self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
+        # testing pose callback
+        # self.test_pose_callback(pose)
+
+    def test_pose_callback(self, pose): 
+        msg = Odometry() 
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.header.frame_id = "map"
+        msg.pose.pose.position.x = pose.pose.pose.position.x
+        msg.pose.pose.position.y =  pose.pose.pose.position.y
+        msg.pose.pose.orientation.z = pose.pose.pose.orientation.z
+        msg.pose.pose.orientation.w =pose.pose.pose.orientation.w
+
+        self.odom_pub.publish(msg)
+
     def odom_callback(self, odometry): 
         """
         process odometry data to pass into motion model

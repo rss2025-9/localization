@@ -11,6 +11,10 @@ import rclpy
 
 assert rclpy
 
+from sensor_msgs.msg import LaserScan
+
+import threading 
+
 
 class ParticleFilter(Node):
 
@@ -84,6 +88,8 @@ class ParticleFilter(Node):
         self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
         self.weights = np.ones(self.num_particles)/self.num_particles 
 
+        self.lock = threading.Lock()
+
     def pose_callback(self, pose): 
         """
         use rviz /initial_pose for initializing the particles and a guess of where the robot's location is 
@@ -96,11 +102,12 @@ class ParticleFilter(Node):
         theta = np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2 # calcuting yaw angle 
         
         # intialize particles around this with gaussian 
-        self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
-        self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
-        self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
+        with self.lock: 
+            self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
+            self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
+            self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
 
-        self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
+            self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
         # testing pose callback
         # self.test_pose_callback(pose)
@@ -129,7 +136,8 @@ class ParticleFilter(Node):
         odometry_data = np.array([dx, dy, dtheta])
 
         # evaluate through motion model and update particles
-        self.particles = self.motion_model.evaluate(self.particles, odometry_data)
+        with self.lock: 
+            self.particles = self.motion_model.evaluate(self.particles, odometry_data)
 
     def laser_callback(self, scan): 
         """
@@ -139,24 +147,29 @@ class ParticleFilter(Node):
         
         scan_ranges = np.array(scan.ranges)
 
-        # get probabilities for each particle by passing scans into the sensor model and update weights 
-        self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
-        self.weights += 1e-100 # to prevent dividing by 0 
-        self.weights /= np.sum(self.weights) # normalize all the weights 
+        with self.lock: 
+            # get probabilities for each particle by passing scans into the sensor model and update weights 
+            self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
-        # resample particles 
-        self.particles = self.particles[np.random.choice(range(self.num_particles), self.num_particles, self.weights)]
+            if self.weights is None: 
+                return # no weights  
+            
+            self.weights += 1e-100 # to prevent dividing by 0 
+            self.weights /= np.sum(self.weights) # normalize all the weights 
 
-        # publish msg
-        # determine "Average" particle pose and publish 
-        # publishes estimated pose as a transformation between the /map frame and a frame for the expected car's base link 
-        # --> publish to /base_link_pf for simulator 
-        # --> publish to /base_link for real car 
+            # resample particles 
+            self.particles = self.particles[np.random.choice(range(self.num_particles), self.num_particles, p = self.weights)]
 
-        # weighted means for x and y, circular mean for theta 
-        mean_x = np.sum(self.particles[:, 0] * self.weights)
-        mean_y = np.sum(self.particles[:, 1] * self.weights)
-        mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
+            # publish msg
+            # determine "Average" particle pose and publish 
+            # publishes estimated pose as a transformation between the /map frame and a frame for the expected car's base link 
+            # --> publish to /base_link_pf for simulator 
+            # --> publish to /base_link for real car 
+
+            # weighted means for x and y, circular mean for theta 
+            mean_x = np.sum(self.particles[:, 0] * self.weights)
+            mean_y = np.sum(self.particles[:, 1] * self.weights)
+            mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
 
         # publish estimated pose 
         msg = Odometry() 

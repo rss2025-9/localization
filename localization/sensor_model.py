@@ -30,12 +30,12 @@ class SensorModel:
             'lidar_scale_to_map_scale').get_parameter_value().double_value
 
         ####################################
-        # Adjust these parameters
-        self.alpha_hit = 0
-        self.alpha_short = 0
-        self.alpha_max = 0
-        self.alpha_rand = 0
-        self.sigma_hit = 0
+        # Adjust these parameters - initialized to part a values for now 
+        self.alpha_hit = 0.74
+        self.alpha_short = 0.07
+        self.alpha_max = 0.07
+        self.alpha_rand = 0.12
+        self.sigma_hit = 0.5
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -98,9 +98,11 @@ class SensorModel:
             for z_k in range(self.table_width): # LIKE z_k IN PART A
                 #g p formulas iven in part a
 
-                if self.sigma_hit>0:
-                    p_hit=np.exp(-0.5*((z_k-d)/self.sigma_hit)**2.0)/(np.sqrt(2.0*np.pi)*self.sigma_hit)
-                    p_hit[(z_k<0)|(z_k>z_max)]=0.0
+                if self.sigma_hit>0: 
+                    if z_k >= 0 and z_k <= z_max:
+                        p_hit=np.exp(-0.5*((z_k-d)/self.sigma_hit)**2.0)/(np.sqrt(2.0*np.pi)*self.sigma_hit)
+                    else: 
+                        p_hit=0.0
                 else:
                     p_hit=1.0 if z_k==d else 0.0
 
@@ -162,7 +164,7 @@ class SensorModel:
         scans=self.scan_sim.scan(particles)
         
         #distances to pixels via scaling factor
-        scale=self.map_resolution*self.lidar_scale_to_map_scale
+        scale=self.resolution*self.lidar_scale_to_map_scale
 
         observation=np.clip(observation/scale, 0, self.table_width-1).astype(int)
         scans=np.clip(scans/scale, 0, self.table_width-1).astype(int)

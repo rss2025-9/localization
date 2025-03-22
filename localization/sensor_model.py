@@ -1,4 +1,5 @@
 import numpy as np
+import numpy.typing as npt
 from scan_simulator_2d import PyScanSimulator2D
 # Try to change to just `from scan_simulator_2d import PyScanSimulator2D` 
 # if any error re: scan_simulator_2d occurs
@@ -31,11 +32,17 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters - initialized to part a values for now 
-        self.alpha_hit = 0.74
-        self.alpha_short = 0.07
-        self.alpha_max = 0.07
-        self.alpha_rand = 0.12
-        self.sigma_hit = 0.5
+        self.alpha_hit: float = 0.74
+        self.alpha_short: float = 0.07
+        self.alpha_max: float = 0.07
+        self.alpha_rand: float = 0.12
+
+        assert self.alpha_hit + self.alpha_short + self.alpha_max + self.alpha_rand == 1.0, \
+            "Alpha values must sum to 1.0"
+        
+        self.sigma_hit: float = 0.5
+        self.eta: float = 1.0
+        self.epsilon: float = 0.1
 
         # Your sensor table will be a `table_width` x `table_width` np array:
         self.table_width = 201
@@ -89,50 +96,37 @@ class SensorModel:
 
 
         #LIKE PART A OF WRITTEN HW
+        z_max=self.table_width
 
-        z_max=self.table_width-1
-        #given in question
-        #epsilon=0.1
-
-        for d in range(self.table_width): #LIKE d IN PART A
-
-            p_hit_d = np.array([
-                np.exp(-0.5*((z_k-d)**2.0/self.sigma_hit**2.0))
-                if z_k >= 0 and z_k <= z_max else 0.0
-                for z_k in range(self.table_width)
-                ])
-            p_hit_d = p_hit_d / np.sum(p_hit_d) # normalize p_hit across z_k
-
+        for d in range(self.table_width): #LIKE d IN PART A=
             for z_k in range(self.table_width): # LIKE z_k IN PART A
-                #p formulas given in part a
-
-                # if self.sigma_hit>0: 
-                #     if z_k >= 0 and z_k <= z_max:
-                #         p_hit=np.exp(-0.5*((z_k-d)**2.0/self.sigma_hit**2.0))/(np.sqrt(2.0*np.pi*self.sigma_hit**2.0))
-                #     else: 
-                #         p_hit=0.0
-                # else:
-                #     p_hit=1.0 if z_k==d else 0.0
-
-                p_hit = p_hit_d[z_k]
+                p_hit: float = 0.0
+                if 0 <= z_k <= z_max:
+                    p_hit = (
+                        self.eta * 1/(np.sqrt(2 * np.pi * self.sigma_hit**2)) *
+                        np.exp(-((z_k - d)**2) / (2 * self.sigma_hit**2))
+                    )
 
                 p_short=0.0 
-                if 0 <= z_k <= d and d > 0:
-                    p_short = (2.0 / float(d)) * (1.0 - (z_k / float(d)))
+                if 0 <= z_k <= d and d != 0:
+                    p_short = (2 / d) * (1 - (z_k / d))
 
                 p_max=0.0
-                if z_k == z_max:
-                    p_max = 1.0
+                if z_max - self.epsilon <= z_k <= z_max:
+                    p_max = 1.0/self.epsilon
 
                 p_rand = 0.0
                 if 0 <= z_k <= z_max:
                     p_rand = 1.0/z_max
                 
                 #do weighted sum as given based on alphas, put into table
-                self.sensor_model_table[d, z_k] = self.alpha_hit*p_hit + self.alpha_short*p_short + self.alpha_max*p_max + self.alpha_rand*p_rand
+                self.sensor_model_table[d, z_k] = (
+                    self.alpha_hit*p_hit + self.alpha_short*p_short + 
+                    self.alpha_max*p_max + self.alpha_rand*p_rand
+                )
         
-        #normal cols to sum to one (each col. is a d val)
-        self.sensor_model_table=self.sensor_model_table/(self.sensor_model_table.sum(axis=1, keepdims=True))
+        for d in range(self.table_width):
+            self.sensor_model_table[d, :] /= np.sum(self.sensor_model_table[d, :]) #normalize each column
 
     def evaluate(self, particles, observation):
         """

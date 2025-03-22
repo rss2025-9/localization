@@ -93,20 +93,21 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-        for d in range(self.table_width): #LIKE d IN PART A=
+        for d in range(self.table_width): #LIKE d IN PART A
+            p_hits = ([
+                1/(np.sqrt(2 * np.pi * self.sigma_hit**2)) *
+                np.exp(-((z_k - d)**2) / (2 * self.sigma_hit**2))
+                for z_k in range(self.table_width)
+            ])
+            p_hits /= np.sum(p_hits) #normalize
             for z_k in range(self.table_width): # LIKE z_k IN PART A
-                p_hit: float = 0.0
-                if 0 <= z_k <= self.table_width:
-                    p_hit = (
-                        1/(np.sqrt(2 * np.pi * self.sigma_hit**2)) *
-                        np.exp(-((z_k - d)**2) / (2 * self.sigma_hit**2))
-                    )
+                p_hit: float = p_hits[z_k]
 
-                p_short=0.0 
+                p_short = 0.0 
                 if 0 <= z_k <= d and d != 0:
                     p_short = (2 / d) * (1 - (z_k / d))
 
-                p_max=0.0
+                p_max = 0.0
                 if z_k == self.table_width:
                     p_max = 1.0
 

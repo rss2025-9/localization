@@ -92,42 +92,47 @@ class SensorModel:
 
         z_max=self.table_width-1
         #given in question
-        epsilon=0.1
+        #epsilon=0.1
 
         for d in range(self.table_width): #LIKE d IN PART A
-            for z_k in range(self.table_width): # LIKE z_k IN PART A
-                #g p formulas iven in part a
 
-                if self.sigma_hit>0: 
-                    if z_k >= 0 and z_k <= z_max:
-                        p_hit=np.exp(-0.5*((z_k-d)/self.sigma_hit)**2.0)/(np.sqrt(2.0*np.pi)*self.sigma_hit)
-                    else: 
-                        p_hit=0.0
-                else:
-                    p_hit=1.0 if z_k==d else 0.0
+            p_hit_d = np.array([
+                np.exp(-0.5*((z_k-d)**2.0/self.sigma_hit**2.0))
+                if z_k >= 0 and z_k <= z_max else 0.0
+                for z_k in range(self.table_width)
+                ])
+            p_hit_d = p_hit_d / np.sum(p_hit_d) # normalize p_hit across z_k
+
+            for z_k in range(self.table_width): # LIKE z_k IN PART A
+                #p formulas given in part a
+
+                # if self.sigma_hit>0: 
+                #     if z_k >= 0 and z_k <= z_max:
+                #         p_hit=np.exp(-0.5*((z_k-d)**2.0/self.sigma_hit**2.0))/(np.sqrt(2.0*np.pi*self.sigma_hit**2.0))
+                #     else: 
+                #         p_hit=0.0
+                # else:
+                #     p_hit=1.0 if z_k==d else 0.0
+
+                p_hit = p_hit_d[z_k]
 
                 p_short=0.0 
                 if 0 <= z_k <= d and d > 0:
                     p_short = (2.0 / float(d)) * (1.0 - (z_k / float(d)))
 
                 p_max=0.0
-                if (z_max - epsilon) <= z_k <= z_max:
-                    p_max = 1.0/epsilon
+                if z_k == z_max:
+                    p_max = 1.0
 
                 p_rand = 0.0
                 if 0 <= z_k <= z_max:
                     p_rand = 1.0/z_max
                 
-                #do wieghted sum as given based on alphas, put into table
+                #do weighted sum as given based on alphas, put into table
                 self.sensor_model_table[d, z_k] = self.alpha_hit*p_hit + self.alpha_short*p_short + self.alpha_max*p_max + self.alpha_rand*p_rand
         
         #normal cols to sum to one (each col. is a d val)
         self.sensor_model_table=self.sensor_model_table/(self.sensor_model_table.sum(axis=1, keepdims=True))
-
-
-
-
-
 
     def evaluate(self, particles, observation):
         """

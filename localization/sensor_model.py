@@ -93,17 +93,12 @@ class SensorModel:
         returns:
             No return type. Directly modify `self.sensor_model_table`.
         """
-
-
-        #LIKE PART A OF WRITTEN HW
-        z_max=self.table_width
-
         for d in range(self.table_width): #LIKE d IN PART A=
             for z_k in range(self.table_width): # LIKE z_k IN PART A
                 p_hit: float = 0.0
-                if 0 <= z_k <= z_max:
+                if 0 <= z_k <= self.table_width:
                     p_hit = (
-                        self.eta * 1/(np.sqrt(2 * np.pi * self.sigma_hit**2)) *
+                        1/(np.sqrt(2 * np.pi * self.sigma_hit**2)) *
                         np.exp(-((z_k - d)**2) / (2 * self.sigma_hit**2))
                     )
 
@@ -112,21 +107,21 @@ class SensorModel:
                     p_short = (2 / d) * (1 - (z_k / d))
 
                 p_max=0.0
-                if z_max - self.epsilon <= z_k <= z_max:
-                    p_max = 1.0/self.epsilon
+                if z_k == self.table_width:
+                    p_max = 1.0
 
                 p_rand = 0.0
-                if 0 <= z_k <= z_max:
-                    p_rand = 1.0/z_max
+                if 0 <= z_k <= self.table_width:
+                    p_rand = 1.0/self.table_width
                 
                 #do weighted sum as given based on alphas, put into table
-                self.sensor_model_table[d, z_k] = (
+                self.sensor_model_table[z_k, d] = (
                     self.alpha_hit*p_hit + self.alpha_short*p_short + 
                     self.alpha_max*p_max + self.alpha_rand*p_rand
                 )
         
         for d in range(self.table_width):
-            self.sensor_model_table[d, :] /= np.sum(self.sensor_model_table[d, :]) #normalize each column
+            self.sensor_model_table[:, d] /= np.sum(self.sensor_model_table[:, d]) #normalize each column
 
     def evaluate(self, particles, observation):
         """

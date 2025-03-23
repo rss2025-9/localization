@@ -129,10 +129,10 @@ class SensorModel:
                     p_rand = 1.0/z_max
                 
                 #do weighted sum as given based on alphas, put into table
-                self.sensor_model_table[d, z_k] = self.alpha_hit*p_hit + self.alpha_short*p_short + self.alpha_max*p_max + self.alpha_rand*p_rand
+                self.sensor_model_table[z_k, d] = self.alpha_hit*p_hit + self.alpha_short*p_short + self.alpha_max*p_max + self.alpha_rand*p_rand
         
         #normal cols to sum to one (each col. is a d val)
-        self.sensor_model_table=self.sensor_model_table/(self.sensor_model_table.sum(axis=1, keepdims=True))
+        self.sensor_model_table=self.sensor_model_table/(self.sensor_model_table.sum(axis=0, keepdims=True))
 
     def evaluate(self, particles, observation):
         """

@@ -6,10 +6,12 @@
 | Pushed code | Monday, April 7th at 11:59PM EST |
 | Briefing (8 min presentation + 3 min Q&A) | Monday, April 7th at 1:00PM EST |
 | Report (on team github pages website) | Friday, April 11th at 11:59PM EST |
-| Checkoff | Wednesday, April 9th at 11:59PM EST |
+| Checkoff | Wednesday, April 9th at 7:00PM EST |
 | [Team Member Assessment](https://forms.gle/5NEPu4AFvtLoBeeTA) | Wednesday, April 9th at 11:59PM EST |
 
-*Note that we will assume the lowest score if the team member assessment form is not submitted on time*
+*Note: We will assume the lowest score if the team member assessment form is not submitted on time*
+
+*Note: Late checkoffs will incur a percentage penalty to your participation grade. Missed checkoffs will result in -1% to your overall grade*
 
 **notebook with detailed instructions for each module: [README.ipynb](README.ipynb)**
 
@@ -41,11 +43,11 @@ The grades will be weighted according to the table below for an overall lab grad
 | report grade (out of 10) | 40% |
 | grade for parts A-E (out of 10, up to 12/10 with extra credit) | 40% |
 
--   **Part A - (Writing Assignment)** Understand the motion and sensor model.
--   **Part B - (Programming Assignment)** Develop and test the particle filter algorithm in 2D racecar simulation environment, upload solution to gradescope for autograder evaluation.
--   **Part C - (Localization)** Adapt your solution from part B to work in your car and conduct experimental analysis for your report and briefing.
--   *Part D - (OPTIONAL: Extra Credit) Derive the Bayes' Filter presented in Lecture 10.*
--   *Part E - (OPTIONAL: Extra Credit) From localization to SLAM: coming soon! Note that Part E will be released Friday, March 21st*
+-   **Part A - (Writing Assignment, 3pts)** Understand the motion and sensor model.
+-   **Part B - (Programming Assignment, 4pts)** Develop and test the particle filter algorithm in 2D racecar simulation environment.
+-   **Part C - (Localization, 3pts)** Adapt your solution from part B to work in your car and conduct experimental analysis for your report and briefing.
+-   *Part D - (OPTIONAL: Extra Credit, 1pts) Derive the Bayes' Filter presented in Lecture 10.*
+-   *Part E - (OPTIONAL: Extra Credit, 1pts) From localization to SLAM: coming soon! Note that Part E will be released Friday, March 21st*
 
 ### Before You Begin: Initial Setup
 
@@ -112,7 +114,24 @@ Derive the form of the Bayes' Filter presented in Lecture 10. Submit as a typed 
 
 ### Part E: Grading for SLAM (1 bonus point) - **TEAMWORK**, *OPTIONAL EXTRA-CREDIT*
 
-Experiment with SLAM 
+Read this very brief introduction to RTABMAP SLAM at this [link](README.SLAM) and then follow these instructions:
+
+- Install RTABMAP (ROS2 Version) on the racecar docker.***
+- Find the rtabmap example launch file for a setup with a ZED camera
+- Read the documentation on how to launch it.
+- Open up RVIZ (on the racecar noVNC server) and select the corresponding topics to visualize the map construction
+- Launch the example, and visualize the topics on RViz
+- Read the documentation and modify the launch file to publish a 2D occupancy grid (map) as the mapping is running
+- Create a map of somewhere available to you (not stata basement or building 31), and save it using the following command or modified version of this command:
+```bash
+ros2 run nav2_map_server map_saver_cli -f my_map --ros-args -r /map:=/rtabmap/grid_map
+```
+#### Note: Replace /rtabmap/grid_map with the actual topic name of the map being published, if it differs
+- Now load that map inside the racecar_simulator/map_server on the racecar, and film a video demonstrating your localization solution (for the hardware) on your newly created map!
+
+
+
+***In order to not have to keep redownloading, look into docker container commits, or reach out to a TA for help on how to do this!
 
 ## Lab Modules
 

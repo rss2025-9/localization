@@ -2,7 +2,7 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose
 
 import numpy as np 
 
@@ -81,6 +81,11 @@ class ParticleFilter(Node):
         # Publish a transformation frame between the map
         # and the particle_filter_frame.
 
+        # visualizing particles
+        self.particles_pub = self.create_publisher(PoseArray, "/particles", 1)
+
+        self.prev_time = None
+
         # initializing number of particles, particles, + their weights 
         self.declare_parameter('num_particles', 100) 
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
@@ -90,7 +95,7 @@ class ParticleFilter(Node):
 
         self.lock = threading.Lock()
 
-    def pose_callback(self, pose): 
+    def pose_callback(self, pose: PoseWithCovarianceStamped): 
         """
         use rviz /initial_pose for initializing the particles and a guess of where the robot's location is 
         with a random spread of particles around a clicked point or pose. 
@@ -123,23 +128,39 @@ class ParticleFilter(Node):
 
         self.odom_pub.publish(msg)
 
-    def odom_callback(self, odometry): 
+    def odom_callback(self, odometry: Odometry): 
         """
         process odometry data to pass into motion model
         only rely on twist and not pose 
         """
+        
+        # calculate the change in time (dt)
+        curr_time = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
+
+        if self.prev_time is None:
+            self.prev_time = curr_time
+            return
+        
+        dt = curr_time - self.prev_time
+        self.prev_time = curr_time
 
         # get odometry data 
-        dx = odometry.twist.twist.linear.x
-        dy = odometry.twist.twist.linear.y
-        dtheta = odometry.twist.twist.angular.z  # yaw once again
+        vx = odometry.twist.twist.linear.x
+        vy = odometry.twist.twist.linear.y
+        theta = odometry.twist.twist.angular.z  # yaw once again
+
+        # calculate dx, dy, dtheta
+        dx = vx * dt
+        dy = vy * dt
+        dtheta = theta * dt
         odometry_data = np.array([dx, dy, dtheta])
 
         # evaluate through motion model and update particles
         with self.lock: 
             self.particles = self.motion_model.evaluate(self.particles, odometry_data)
+            self.publish_avg_pose()
 
-    def laser_callback(self, scan): 
+    def laser_callback(self, scan: LaserScan): 
         """
         process scan data to pass into sensor model 
         and resample particles based on sensor model probabilities, numpy.random.choice can be useful 
@@ -159,28 +180,48 @@ class ParticleFilter(Node):
 
             # resample particles 
             self.particles = self.particles[np.random.choice(range(self.num_particles), self.num_particles, p = self.weights)]
+            self.weights.fill(1 / self.num_particles)   # resetting the weights for all particles
 
-            # publish msg
-            # determine "Average" particle pose and publish 
-            # publishes estimated pose as a transformation between the /map frame and a frame for the expected car's base link 
-            # --> publish to /base_link_pf for simulator 
-            # --> publish to /base_link for real car 
+            self.publish_avg_pose()
 
-            # weighted means for x and y, circular mean for theta 
-            mean_x = np.sum(self.particles[:, 0] * self.weights)
-            mean_y = np.sum(self.particles[:, 1] * self.weights)
-            mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
+    def publish_avg_pose(self):
+        # publish msg
+        # determine "Average" particle pose and publish 
+        # publishes estimated pose as a transformation between the /map frame and a frame for the expected car's base link 
+        # --> publish to /base_link_pf for simulator 
+        # --> publish to /base_link for real car 
+
+        # weighted means for x and y, circular mean for theta 
+        mean_x = np.sum(self.particles[:, 0] * self.weights)
+        mean_y = np.sum(self.particles[:, 1] * self.weights)
+        mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
 
         # publish estimated pose 
         msg = Odometry() 
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "map"
+        msg.child_frame_id = "base_link_pf"
         msg.pose.pose.position.x = mean_x
         msg.pose.pose.position.y = mean_y 
         msg.pose.pose.orientation.z = np.sin(mean_theta / 2)
         msg.pose.pose.orientation.w = np.cos(mean_theta / 2)
 
         self.odom_pub.publish(msg)
+
+        self.publish_particles()
+
+    def publish_particles(self):
+        pose_array = PoseArray()
+        pose_array.header.stamp = self.get_clock().now().to_msg()
+        pose_array.header.frame_id = "map"
+        for i in range(self.num_particles):
+            p = Pose()
+            p.position.x = self.particles[i, 0]
+            p.position.y = self.particles[i, 1]
+            p.orientation.z = np.sin(self.particles[i, 2] / 2)
+            p.orientation.w = np.cos(self.particles[i, 2] / 2)
+            pose_array.poses.append(p)
+        self.particles_pub.publish(pose_array)
 
 def main(args=None):
     rclpy.init(args=args)

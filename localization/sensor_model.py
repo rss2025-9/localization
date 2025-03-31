@@ -45,7 +45,7 @@ class SensorModel:
         self.epsilon: float = 0.1
 
         # Your sensor table will be a `table_width` x `table_width` np array:
-        self.table_width = 201
+        self.table_width: int = 201
         ####################################
 
         node.get_logger().info("%s" % self.map_topic)
@@ -123,6 +123,7 @@ class SensorModel:
         
         for d in range(self.table_width):
             self.sensor_model_table[:, d] /= np.sum(self.sensor_model_table[:, d]) #normalize each column
+
 
     def evaluate(self, particles, observation):
         """
@@ -202,16 +203,3 @@ class SensorModel:
         self.map_set = True
 
         print("Map initialized")
-
-
-
-
-
-
-
-
-
-
-
-
-

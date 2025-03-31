@@ -49,10 +49,6 @@ The grades will be weighted according to the table below for an overall lab grad
 -   *Part D - (OPTIONAL: Extra Credit, 1pts) Derive the Bayes' Filter presented in Lecture 10.*
 -   *Part E - (OPTIONAL: Extra Credit, 1pts) From localization to SLAM: coming soon! Note that Part E will be released Friday, March 21st*
 
-### Before You Begin: Initial Setup
-
-N/A for now
-
 ### Part A: Grading for writing assignment (3 points) - **INDIVIDUAL EFFORT**, *REQUIRED*
 
 Submit your answers **individually** to the writing assignment on gradescope, preferably LaTeXed. You must show work (derivations, formulas used, etc.) to receive full credit. You may collaborate on problems but you cannot simply share answers - please note collaborators in your submission. You must write up your solutions independently. The 3 points of part A will be assigned based on the submitted written exercises:
@@ -112,12 +108,12 @@ In your report and briefing, make sure to provide:
 
 Derive the form of the Bayes' Filter presented in Lecture 10. Submit as a typed PDF uploaded to the **Lab 5 Part D: OPTIONAL** gradescope assignment.
 
-### Part E: Grading for SLAM (1 bonus point) - **TEAMWORK**, *OPTIONAL EXTRA-CREDIT*
+### Part E: Grading for SLAM (1 bonus point) - **TEAMWORK**, *OPTIONAL EXTRA-CREDIT* PLEASE WORK ON THIS **AFTER** YOU FINISH HARDWARE LOCALIZATION
 
-Read this very brief introduction to RTABMAP SLAM at this [link](README.SLAM) and then follow these instructions:
+Read this very brief introduction to RTABMAP SLAM at this [link](https://introlab.github.io/rtabmap/) and then follow these instructions:
 
 - Install RTABMAP (ROS2 Version) on the racecar docker.***
-- Find the rtabmap example launch file for a setup with a ZED camera
+- Find the rtabmap example launch file in the documentations and modify the topics to fit your current set up
 - Read the documentation on how to launch it.
 - Open up RVIZ (on the racecar noVNC server) and select the corresponding topics to visualize the map construction
 - Launch the example, and visualize the topics on RViz
@@ -131,7 +127,11 @@ ros2 run nav2_map_server map_saver_cli -f my_map --ros-args -r /map:=/rtabmap/gr
 
 
 
+
 ***In order to not have to keep redownloading, look into docker container commits, or reach out to a TA for help on how to do this!
+
+#### Note: You may have "odometry" lost issues, if so, move the car a bit slower so it does not lose track of itself. 
+
 
 ## Lab Modules
 

@@ -107,12 +107,13 @@ class ParticleFilter(Node):
         theta = np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2 # calcuting yaw angle 
         
         # intialize particles around this with gaussian 
-        with self.lock: 
-            self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
-            self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
-            self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
+        if self.weights is not None: 
+            with self.lock: 
+                self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
+                self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
+                self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
 
-            self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
+                self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
         # testing pose callback
         # self.test_pose_callback(pose)
@@ -175,14 +176,16 @@ class ParticleFilter(Node):
             if self.weights is None: 
                 return # no weights  
             
-            self.weights += 1e-100 # to prevent dividing by 0 
-            self.weights /= np.sum(self.weights) # normalize all the weights 
+            # self.weights += 1e-10 # to prevent dividing by 0 
+            if np.sum(self.weights) != 0:
+                self.weights /= np.sum(self.weights) # normalize all the weights 
 
             # resample particles 
-            self.particles = self.particles[np.random.choice(range(self.num_particles), self.num_particles, p = self.weights)]
-            self.weights.fill(1 / self.num_particles)   # resetting the weights for all particles
-
+            self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
+            
             self.publish_avg_pose()
+            
+            self.weights.fill(1 / self.num_particles)   # resetting the weights for all particles
 
     def publish_avg_pose(self):
         # publish msg

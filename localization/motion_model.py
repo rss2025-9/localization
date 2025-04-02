@@ -49,9 +49,9 @@ class MotionModel:
             if self.deterministic:
                 noise: np.ndarray = np.zeros(odometry.shape)
             else:
-                noise: np.ndarray = np.array([np.random.normal(0, self.noise), 
-                                              np.random.normal(0, self.noise/2), 
-                                              np.random.normal(0, self.noise/2)])
+                noise: np.ndarray = np.array([np.random.normal(0, self.noise/2), 
+                                              np.random.normal(0, self.noise/4), 
+                                              np.random.normal(0, self.noise/4)])
             # And updating the particle.
             particle[:2] += rotation_matrix @ (odometry[:2] + noise[:2])
             particle[2] += odometry[2] + noise[2]

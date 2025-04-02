@@ -16,6 +16,8 @@ np.set_printoptions(threshold=sys.maxsize)
 class SensorModel:
 
     def __init__(self, node):
+        self.node = node 
+
         node.declare_parameter('map_topic', "default")
         node.declare_parameter('num_beams_per_particle', 1)
         node.declare_parameter('scan_theta_discretization', 1.0)
@@ -23,6 +25,7 @@ class SensorModel:
         node.declare_parameter('lidar_scale_to_map_scale', 1.0)
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
+        node.get_logger().info(f"{self.map_topic}")
         self.num_beams_per_particle = node.get_parameter('num_beams_per_particle').get_parameter_value().integer_value
         self.scan_theta_discretization = node.get_parameter(
             'scan_theta_discretization').get_parameter_value().double_value
@@ -147,6 +150,7 @@ class SensorModel:
         """
 
         if not self.map_set:
+            # self.node.get_logger().info("map not set")
             return
 
         ####################################
@@ -163,9 +167,11 @@ class SensorModel:
         scale=self.resolution*self.lidar_scale_to_map_scale
 
         observation=np.clip(observation/scale, 0, self.table_width-1).astype(int)
+        observation = observation[np.linspace(0, observation.shape[0] - 1, 99, dtype = int)]
         scans=np.clip(scans/scale, 0, self.table_width-1).astype(int)
         
         #gets probs
+        # self.node.get_logger().info(f'{scans.shape}, {observation.shape}')
         probs=self.sensor_model_table[scans, observation]
         
         #multiply probs across all beams per particle

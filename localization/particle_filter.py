@@ -87,13 +87,15 @@ class ParticleFilter(Node):
         self.prev_time = None
 
         # initializing number of particles, particles, + their weights 
-        self.declare_parameter('num_particles', 100) 
+        self.declare_parameter('num_particles', 50) 
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
 
         self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
         self.weights = np.ones(self.num_particles)/self.num_particles 
 
         self.lock = threading.Lock()
+
+        self.simulation = False
 
     def pose_callback(self, pose: PoseWithCovarianceStamped): 
         """
@@ -115,20 +117,6 @@ class ParticleFilter(Node):
 
                 self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
-        # testing pose callback
-        # self.test_pose_callback(pose)
-
-    def test_pose_callback(self, pose): 
-        msg = Odometry() 
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
-        msg.pose.pose.position.x = pose.pose.pose.position.x
-        msg.pose.pose.position.y =  pose.pose.pose.position.y
-        msg.pose.pose.orientation.z = pose.pose.pose.orientation.z
-        msg.pose.pose.orientation.w =pose.pose.pose.orientation.w
-
-        self.odom_pub.publish(msg)
-
     def odom_callback(self, odometry: Odometry): 
         """
         process odometry data to pass into motion model
@@ -146,9 +134,14 @@ class ParticleFilter(Node):
         self.prev_time = curr_time
 
         # get odometry data 
-        vx = odometry.twist.twist.linear.x
-        vy = odometry.twist.twist.linear.y
-        theta = odometry.twist.twist.angular.z  # yaw once again
+        if self.simulation: 
+            vx = odometry.twist.twist.linear.x
+            vy = odometry.twist.twist.linear.y
+            theta = odometry.twist.twist.angular.z  # yaw once again
+        else:
+            vx = -odometry.twist.twist.linear.x
+            vy = -odometry.twist.twist.linear.y
+            theta = -odometry.twist.twist.angular.z  # yaw once again
 
         # calculate dx, dy, dtheta
         dx = vx * dt
@@ -157,9 +150,10 @@ class ParticleFilter(Node):
         odometry_data = np.array([dx, dy, dtheta])
 
         # evaluate through motion model and update particles
-        with self.lock: 
-            self.particles = self.motion_model.evaluate(self.particles, odometry_data)
-            self.publish_avg_pose()
+        if self.weights is not None: 
+            with self.lock: 
+                self.particles = self.motion_model.evaluate(self.particles, odometry_data)
+                self.publish_avg_pose()
 
     def laser_callback(self, scan: LaserScan): 
         """
@@ -169,13 +163,18 @@ class ParticleFilter(Node):
         
         scan_ranges = np.array(scan.ranges)
 
+        # self.get_logger().info("before lock")
         with self.lock: 
             # get probabilities for each particle by passing scans into the sensor model and update weights 
             self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
+            # self.get_logger().info("before weights")
             if self.weights is None: 
+                self.get_logger().info("no weights")
                 return # no weights  
             
+            # self.get_logger().info("weights found")
+
             # self.weights += 1e-10 # to prevent dividing by 0 
             if np.sum(self.weights) != 0:
                 self.weights /= np.sum(self.weights) # normalize all the weights 
@@ -203,7 +202,10 @@ class ParticleFilter(Node):
         msg = Odometry() 
         msg.header.stamp = self.get_clock().now().to_msg()
         msg.header.frame_id = "map"
-        msg.child_frame_id = "base_link_pf"
+        if self.simulation: 
+            msg.child_frame_id = "base_link_pf"
+        else: 
+            msg.child_frame_id = "base_link"
         msg.pose.pose.position.x = mean_x
         msg.pose.pose.position.y = mean_y 
         msg.pose.pose.orientation.z = np.sin(mean_theta / 2)

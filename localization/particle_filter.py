@@ -168,19 +168,15 @@ class ParticleFilter(Node):
             # get probabilities for each particle by passing scans into the sensor model and update weights 
             self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
-            # self.get_logger().info("before weights")
             if self.weights is None: 
                 self.get_logger().info("no weights")
                 return # no weights  
-            
-            # self.get_logger().info("weights found")
 
-            # self.weights += 1e-10 # to prevent dividing by 0 
             weights_sum: float = np.sum(self.weights)
             if (weights_sum != 0):
                 self.weights /= weights_sum # normalize all the weights 
 
-            # resample particles 
+            # resample particles
             self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
             
             self.publish_avg_pose()

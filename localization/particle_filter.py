@@ -176,8 +176,9 @@ class ParticleFilter(Node):
             # self.get_logger().info("weights found")
 
             # self.weights += 1e-10 # to prevent dividing by 0 
-            if np.sum(self.weights) != 0:
-                self.weights /= np.sum(self.weights) # normalize all the weights 
+            weights_sum: float = np.sum(self.weights)
+            if (weights_sum != 0):
+                self.weights /= weights_sum # normalize all the weights 
 
             # resample particles 
             self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]

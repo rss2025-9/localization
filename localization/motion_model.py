@@ -34,28 +34,28 @@ class MotionModel:
             particles: An updated matrix of the
                 same size
         """
-
-        ####################################
+        N: int = particles.shape[0]
         
-        particle: np.ndarray
-        # Update each particle
-        for particle in particles:
-            # By calculating the rotation matrix of the particle movement.
-            rotation_matrix: np.ndarray = np.array([
-                [np.cos(particle[2]), -np.sin(particle[2])],
-                [np.sin(particle[2]), np.cos(particle[2])]]
-            )
-            # Adding noise if the motion model is not deterministic.
-            if self.deterministic:
-                noise: np.ndarray = np.zeros(odometry.shape)
-            else:
-                noise: np.ndarray = np.array([np.random.normal(0, self.noise/2), 
-                                              np.random.normal(0, self.noise/4), 
-                                              np.random.normal(0, self.noise/4)])
-            # And updating the particle.
-            particle[:2] += rotation_matrix @ (odometry[:2] + noise[:2])
-            particle[2] += odometry[2] + noise[2]
+        # Generate noise for each particle. Noise has shape (N, 3).
+        noise: npt.NDArray = (
+            np.zeros((N, 3)) if self.deterministic else 
+            np.random.normal(0, self.std, size=particles.shape)
+        )
+        
+        # Extract the current orientations for all particles.
+        theta = particles[:, 2]
+        cos_theta = np.cos(theta)
+        sin_theta = np.sin(theta)
+        
+        # Apply the odometry translation (with noise) to all particles.
+        dx = odometry[0] + noise[:, 0]
+        dy = odometry[1] + noise[:, 1]
+
+        # Update positions by rotating the odometry translation.
+        particles[:, 0] += cos_theta * dx - sin_theta * dy
+        particles[:, 1] += sin_theta * dx + cos_theta * dy
+        
+        # Update orientations.
+        particles[:, 2] += odometry[2] + noise[:, 2]
         
         return particles
-
-        ####################################

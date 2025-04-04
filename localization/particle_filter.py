@@ -193,9 +193,7 @@ class ParticleFilter(Node):
         # --> publish to /base_link for real car 
 
         # weighted means for x and y, circular mean for theta 
-        mean_x = np.sum(self.particles[:, 0] * self.weights)
-        mean_y = np.sum(self.particles[:, 1] * self.weights)
-        mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
+        mean_pose = np.sum(self.particles * self.weights, axis=0)
 
         # publish estimated pose 
         msg = Odometry() 
@@ -205,13 +203,12 @@ class ParticleFilter(Node):
             msg.child_frame_id = "base_link_pf"
         else: 
             msg.child_frame_id = "base_link"
-        msg.pose.pose.position.x = mean_x
-        msg.pose.pose.position.y = mean_y 
-        msg.pose.pose.orientation.z = np.sin(mean_theta / 2)
-        msg.pose.pose.orientation.w = np.cos(mean_theta / 2)
+        msg.pose.pose.position.x = mean_pose[0]
+        msg.pose.pose.position.y = mean_pose[1]
+        msg.pose.pose.orientation.z = np.sin(mean_pose[2] / 2)
+        msg.pose.pose.orientation.w = np.cos(mean_pose[2] / 2)
 
         self.odom_pub.publish(msg)
-
         self.publish_particles()
 
     def publish_particles(self):

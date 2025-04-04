@@ -177,7 +177,9 @@ class ParticleFilter(Node):
                 self.weights /= weights_sum # normalize all the weights 
 
             # resample particles
-            self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
+            self.particles = np.random.choice(
+                self.particles, size = self.particles.shape[0], p = self.weights, replace = True
+            )
             
             self.publish_avg_pose()
             

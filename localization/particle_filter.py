@@ -2,7 +2,7 @@ from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 
 import numpy as np 
 
@@ -14,6 +14,7 @@ assert rclpy
 from sensor_msgs.msg import LaserScan
 
 import threading 
+import numpy.typing as npt 
 
 # Helper functions 
 def systematic_resample(weights: np.ndarray): 
@@ -233,17 +234,38 @@ class ParticleFilter(Node):
 
         self.publish_particles()
 
+    # def publish_particles(self):
+    #     pose_array = PoseArray()
+    #     pose_array.header.stamp = self.get_clock().now().to_msg()
+    #     pose_array.header.frame_id = "map"
+    #     for i in range(self.num_particles):
+    #         p = Pose()
+    #         p.position.x = self.particles[i, 0]
+    #         p.position.y = self.particles[i, 1]
+    #         p.orientation.z = np.sin(self.particles[i, 2] / 2)
+    #         p.orientation.w = np.cos(self.particles[i, 2] / 2)
+    #         pose_array.poses.append(p)
+    #     self.particles_pub.publish(pose_array)
+
     def publish_particles(self):
         pose_array = PoseArray()
         pose_array.header.stamp = self.get_clock().now().to_msg()
         pose_array.header.frame_id = "map"
-        for i in range(self.num_particles):
-            p = Pose()
-            p.position.x = self.particles[i, 0]
-            p.position.y = self.particles[i, 1]
-            p.orientation.z = np.sin(self.particles[i, 2] / 2)
-            p.orientation.w = np.cos(self.particles[i, 2] / 2)
-            pose_array.poses.append(p)
+        
+        # Vectorized computations for positions and orientations
+        half_thetas: npt.NDArray = self.particles[:, 2] / 2
+        sin_half: npt.NDArray = np.sin(half_thetas)
+        cos_half: npt.NDArray = np.cos(half_thetas)
+        
+        # Use list comprehension to create Pose messages for each particle
+        pose_array.poses = [
+            Pose(
+                position=Point(x=self.particles[i, 0], y=self.particles[i, 1], z=0.0),
+                orientation=Quaternion(x=0.0, y=0.0, z=sin_half[i], w=cos_half[i])
+            )
+            for i in range(self.num_particles)
+        ]
+        
         self.particles_pub.publish(pose_array)
 
 def main(args=None):

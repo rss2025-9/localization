@@ -32,7 +32,7 @@ This lab consists of a number of modules, some required and some extra credit, s
 This section describes the grading scheme for Lab 5, while the instructions to get started on the lab at available in the [instructions notebook](README.ipynb).
 The deliverables for this lab consist of five parts (two of which are optional) for a total of 10 points with 2 possible extra credit points. Parts A and D must be submitted individually, while the rest are teamwork. Parts A, B, and C are required and will be graded out of 10 points. Parts D and E are optional and 2 extra credit points are possible for a maximum grade of 12/10 points with extra credit. *Note that part A is due sooner than the others, to encourage getting an early start on it - see the deliverables table at the top of this handout for all deadlines. In addition, due to the individual nature of parts A and D, overall lab grades may differ across teammates.*
 
-There will also be a report and briefing for this lab, and each teammate must submit the [team member assessment form](https://forms.gle/5NEPu4AFvtLoBeeTA). The report will serve as a draft for your next lab, and you will be expected to revise and update sections in the future. 
+There will also be a report and briefing for this lab, and each teammate must submit the [team member assessment form](https://forms.gle/5NEPu4AFvtLoBeeTA). The lab 5 report will serve as a basis for your next lab, and you will be expected to revise and update sections in the future when writing the lab 6 report. 
 
 This grade out of 10 points is then combined with the report and briefing grades (each also out of 10 points - same rubrics used as in the previous labs for [reports](https://canvas.mit.edu/courses/31106/assignments/393140) and [briefings](https://canvas.mit.edu/courses/31106/assignments/385210)). 
 The grades will be weighted according to the table below for an overall lab grade out of 10 points.  
@@ -48,6 +48,24 @@ The grades will be weighted according to the table below for an overall lab grad
 -   **Part C - (Localization, 3pts)** Adapt your solution from part B to work in your car and conduct experimental analysis for your report and briefing.
 -   *Part D - (OPTIONAL: Extra Credit, 1pts) Derive the Bayes' Filter presented in Lecture 10.*
 -   *Part E - (OPTIONAL: Extra Credit, 1pts) From localization to SLAM: coming soon! Note that Part E will be released Friday, March 21st*
+
+### Initial Setup
+
+In order to build this package, we need to include a few dependencies that are not already included on the car. Note that this does **not** affect your work in the simulator.
+
+Please come find an instructor to do this for you, as this step requires an internet connection.
+ 
+ ============================= **Note for TAs** ============================= 
+ 
+ Pull the updated docker image (`sebagarc/racecar-real`), which contains:
+ 
+ - the re-routed `racecar_simulator`
+ - `SIM_WS` environment variable
+ - two additional apt packages.
+ 
+ Verify that the localization package can be built.
+ 
+ =====================================================================
 
 ### Part A: Grading for writing assignment (3 points) - **INDIVIDUAL EFFORT**, *REQUIRED*
 
@@ -114,7 +132,7 @@ Read this very brief introduction to RTABMAP SLAM at this [link](https://introla
 
 - Install RTABMAP (ROS2 Version) on the racecar docker.***
 - Find the rtabmap example launch file in the documentations and modify the topics to fit your current set up
-- Read the documentation on how to launch it.
+- Read the documentation on how to launch it, and launch the software with whichever configuration you desire, whether that be using the ZED camera, depth camera, LIDAR, visual odometry, racecar wheel odometry (topic = /vesc/odom, frame = odom)
 - Open up RVIZ (on the racecar noVNC server) and select the corresponding topics to visualize the map construction
 - Launch the example, and visualize the topics on RViz
 - Read the documentation and modify the launch file to publish a 2D occupancy grid (map) as the mapping is running

@@ -196,10 +196,10 @@ class ParticleFilter(Node):
                 self.weights /= np.sum(self.weights) # normalize all the weights 
 
             # resample particles 
-            # self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
+            self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
             
-            # systematically resample particles - theoretically faster
-            self.particles = self.particles[systematic_resample(self.weights)] 
+            # systematically resample particles - different method
+            # self.particles = self.particles[systematic_resample(self.weights)] 
 
             self.publish_avg_pose()
             

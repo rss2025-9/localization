@@ -57,8 +57,8 @@ def generate_icp_odometry(context):
         output="screen",
         parameters=[params],
         remappings=[
-            ("scan", "/jn0/base_scan"),
-            ("odom", "/scanmatch_odom"),
+            ("scan", "/scan"),
+            ("odom", "/vesc/odom"),
             ("odom_info", "/rtabmap/odom_info")
         ]
     )
@@ -85,7 +85,7 @@ def generate_rtabmap_node(context):
         "Grid/RangeMax": max_range,
         "use_sim_time": True,
     }
-    remappings = [("scan", "/jn0/base_scan")]
+    remappings = [("scan", "/scan")]
     if hector:
         params["odom_frame_id"] = "hector_map"
         params["odom_tf_linear_variance"] = 0.0005
@@ -116,11 +116,11 @@ def generate_rtabmap_viz_node(context):
         "frame_id": "base_footprint",
         "use_sim_time": True,
     }
-    remappings = [("scan", "/jn0/base_scan")]
+    remappings = [("scan", "/scan")]
     if hector:
         params["odom_frame_id"] = "hector_map"
     else:
-        remappings.append(("odom", "/scanmatch_odom"))
+        remappings.append(("odom", "/vesc/odom"))
         params["subscribe_odom_info"] = True
 
     # Determine the configuration file path (assuming it is installed with the package)
@@ -181,7 +181,7 @@ def generate_launch_description():
             "map_size": 2048,
             "map_multi_res_levels": 2,
             "map_update_angle_thresh": 0.06,
-            "scan_topic": "/jn0/base_scan",
+            "scan_topic": "/scan",
             "use_sim_time": True,
         }],
         condition=IfCondition(LaunchConfiguration("hector"))

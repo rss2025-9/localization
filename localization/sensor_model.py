@@ -167,7 +167,7 @@ class SensorModel:
         scale=self.resolution*self.lidar_scale_to_map_scale
 
         observation=np.clip(observation/scale, 0, self.table_width-1).astype(int)
-        observation = observation[np.linspace(0, observation.shape[0] - 1, 99, dtype = int)]
+        observation = observation[np.linspace(0, observation.shape[0] - 1, 100, dtype = int)]
         scans=np.clip(scans/scale, 0, self.table_width-1).astype(int)
         
         #gets probs

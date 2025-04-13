@@ -102,18 +102,21 @@ class ParticleFilter(Node):
         with a random spread of particles around a clicked point or pose. 
         """
 
-        # getting x, y, theta from the pose 
-        x = pose.pose.pose.position.x 
-        y = pose.pose.pose.position.y
-        theta = np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2 # calcuting yaw angle 
+        # getting x, y, yaw from the pose
+        pose: tuple = (
+            pose.pose.pose.position.x,
+            pose.pose.pose.position.y,
+            np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2
+        )
         
         # intialize particles around this with gaussian 
         if self.weights is not None: 
             with self.lock: 
-                self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
-                self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
-                self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
-
+                self.particles = np.random.normal(
+                    pose, 
+                    [self.motion_model.std, self.motion_model.std/2, self.motion_model.std/2], 
+                    (self.num_particles, 3)
+                )
                 self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
     def odom_callback(self, odometry: Odometry): 

@@ -23,6 +23,7 @@ class SensorModel:
         node.declare_parameter('scan_theta_discretization', 1.0)
         node.declare_parameter('scan_field_of_view', 1.0)
         node.declare_parameter('lidar_scale_to_map_scale', 1.0)
+        node.declare_parameter('lidar_samples', 100)
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
         node.get_logger().info(f"{self.map_topic}")
@@ -32,6 +33,7 @@ class SensorModel:
         self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
         self.lidar_scale_to_map_scale = node.get_parameter(
             'lidar_scale_to_map_scale').get_parameter_value().double_value
+        self.lidar_samples = node.get_parameter('lidar_samples').get_parameter_value().integer_value
 
         ####################################
         # Adjust these parameters - initialized to part a values for now 
@@ -161,17 +163,18 @@ class SensorModel:
         # to perform ray tracing from all the particles.
         # This produces a matrix of size N x num_beams_per_particle 
 
-        scans=self.scan_sim.scan(particles)
-        
-        #distances to pixels via scaling factor
-        scale=self.resolution*self.lidar_scale_to_map_scale
 
-        observation=np.clip(observation/scale, 0, self.table_width-1).astype(int)
-        observation = observation[np.linspace(0, observation.shape[0] - 1, 100, dtype = int)]
-        scans=np.clip(scans/scale, 0, self.table_width-1).astype(int)
+        #distances to pixels via scaling factor
+        scale = self.resolution*self.lidar_scale_to_map_scale
+        # Scales the scans and observations.
+        scans = (self.scan_sim.scan(particles)/scale).astype(int)
+        scans = np.clip(scans, 0, self.table_width-1)
+        observation = (observation[
+            np.linspace(0, observation.shape[0] - 1, self.lidar_samples, dtype = int)
+        ]/scale).astype(int)
+        observation = np.clip(observation, 0, self.table_width-1)
         
         #gets probs
-        # self.node.get_logger().info(f'{scans.shape}, {observation.shape}')
         probs=self.sensor_model_table[scans, observation]
         
         #multiply probs across all beams per particle

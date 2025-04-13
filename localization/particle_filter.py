@@ -177,10 +177,7 @@ class ParticleFilter(Node):
             self.particles = self.particles[
                 np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)
             ]
-
             self.publish_avg_pose()
-            
-            self.weights.fill(1 / self.num_particles)   # resetting the weights for all particles
 
     def publish_avg_pose(self):
         # publish msg

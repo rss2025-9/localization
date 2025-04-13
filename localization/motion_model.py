@@ -43,15 +43,15 @@ class MotionModel:
 
         # Generates all odometry noise for all particles.
         if self.deterministic:
-            particles[:, 0] += odometry[0] * coss + odometry[1] * sins
-            particles[:, 1] += odometry[0] * sins - odometry[1] * coss
+            particles[:, 0] += odometry[0] * coss - odometry[1] * sins
+            particles[:, 1] += odometry[0] * sins + odometry[1] * coss
             particles[:, 2] += odometry[2]
         else:
             noisy_odom: npt.NDArray = np.random.normal(
                 odometry[:2], [self.std, self.std/2], size=(N, 2)
             )
-            particles[:, 0] += noisy_odom[:, 0] * coss + noisy_odom[:, 1] * sins
-            particles[:, 1] += noisy_odom[:, 0] * sins - noisy_odom[:, 1] * coss
+            particles[:, 0] += noisy_odom[:, 0] * coss - noisy_odom[:, 1] * sins
+            particles[:, 1] += noisy_odom[:, 0] * sins + noisy_odom[:, 1] * coss
             particles[:, 2] += np.random.normal(odometry[2], self.std/2, size=N)
         # Normalize the angles to be between -pi and pi
         particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))

@@ -4,7 +4,8 @@ from localization.motion_model import MotionModel
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 
-import numpy as np 
+import numpy as np
+import numpy.typing as npt
 
 from rclpy.node import Node
 import rclpy
@@ -187,10 +188,9 @@ class ParticleFilter(Node):
         # --> publish to /base_link for real car 
 
         # weighted means for x and y, circular mean for theta 
-        mean_x = np.sum(self.particles[:, 0] * self.weights)
-        mean_y = np.sum(self.particles[:, 1] * self.weights)
-        mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
-
+        mean: npt.NDArray[np.float] = np.sum(
+            self.particles * self.weights[:, np.newaxis], axis=1
+        )
         # publish estimated pose 
         msg = Odometry() 
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -199,13 +199,12 @@ class ParticleFilter(Node):
             msg.child_frame_id = "base_link_pf"
         else: 
             msg.child_frame_id = "base_link"
-        msg.pose.pose.position.x = mean_x
-        msg.pose.pose.position.y = mean_y 
-        msg.pose.pose.orientation.z = np.sin(mean_theta / 2)
-        msg.pose.pose.orientation.w = np.cos(mean_theta / 2)
+        msg.pose.pose.position.x = mean[0]
+        msg.pose.pose.position.y = mean[1] 
+        msg.pose.pose.orientation.z = np.sin(mean[2] / 2)
+        msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
 
         self.odom_pub.publish(msg)
-
         self.publish_particles()
 
     def publish_particles(self):

@@ -16,24 +16,7 @@ from sensor_msgs.msg import LaserScan
 import threading 
 import numpy.typing as npt 
 
-# Helper functions 
-def systematic_resample(weights: np.ndarray): 
-    N = len(weights)
-    positions = (np.arange(N) + np.random.uniform(0, 1)) / N
-    indexes = np.zeros(N, dtype=int)
-
-    cumulative_sum = np.cumsum(weights)
-    i, j = 0, 0
-    while i < N:
-        if positions[i] < cumulative_sum[j]:
-            indexes[i] = j
-            i += 1
-        else:
-            j += 1
-    return indexes
-
 class ParticleFilter(Node):
-
     def __init__(self):
         super().__init__("particle_filter")
 
@@ -103,7 +86,7 @@ class ParticleFilter(Node):
         self.prev_time = None
 
         # initializing number of particles, particles, + their weights 
-        self.declare_parameter('num_particles', 50) 
+        self.declare_parameter('num_particles', 100) 
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
 
         self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
@@ -233,19 +216,6 @@ class ParticleFilter(Node):
         self.odom_pub.publish(msg)
 
         self.publish_particles()
-
-    # def publish_particles(self):
-    #     pose_array = PoseArray()
-    #     pose_array.header.stamp = self.get_clock().now().to_msg()
-    #     pose_array.header.frame_id = "map"
-    #     for i in range(self.num_particles):
-    #         p = Pose()
-    #         p.position.x = self.particles[i, 0]
-    #         p.position.y = self.particles[i, 1]
-    #         p.orientation.z = np.sin(self.particles[i, 2] / 2)
-    #         p.orientation.w = np.cos(self.particles[i, 2] / 2)
-    #         pose_array.poses.append(p)
-    #     self.particles_pub.publish(pose_array)
 
     def publish_particles(self):
         pose_array = PoseArray()

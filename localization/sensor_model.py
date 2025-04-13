@@ -175,7 +175,7 @@ class SensorModel:
         observation = np.clip(observation, 0, self.table_width-1)
         
         #gets probs
-        probs=self.sensor_model_table[scans, observation]
+        probs = self.sensor_model_table[scans, observation]
         
         #multiply probs across all beams per particle
         return np.prod(probs, axis=1)

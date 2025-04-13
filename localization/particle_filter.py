@@ -126,35 +126,31 @@ class ParticleFilter(Node):
         """
         
         # calculate the change in time (dt)
-        curr_time = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
+        curr_time: float = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
 
         if self.prev_time is None:
             self.prev_time = curr_time
             return
         
-        dt = curr_time - self.prev_time
+        dt: float = curr_time - self.prev_time
         self.prev_time = curr_time
 
         # get odometry data 
-        if self.simulation: 
-            vx = odometry.twist.twist.linear.x
-            vy = odometry.twist.twist.linear.y
-            theta = odometry.twist.twist.angular.z  # yaw once again
-        else:
-            vx = -odometry.twist.twist.linear.x
-            vy = -odometry.twist.twist.linear.y
-            theta = -odometry.twist.twist.angular.z  # yaw once again
+        odom: npt.NDArray[np.float] = np.array(
+            [odometry.twist.twist.linear.x, # vx
+             odometry.twist.twist.linear.y, # vy
+             odometry.twist.twist.angular.z]# yaw
+        )
 
-        # calculate dx, dy, dtheta
-        dx = vx * dt
-        dy = vy * dt
-        dtheta = theta * dt
-        odometry_data = np.array([dx, dy, dtheta])
+        # IRL odom flip fix.
+        if not self.simulation: 
+            odom = -odom
 
         # evaluate through motion model and update particles
         if self.weights is not None: 
             with self.lock: 
-                self.particles = self.motion_model.evaluate(self.particles, odometry_data)
+                # Evolve particles by odometry * dt.
+                self.particles = self.motion_model.evaluate(self.particles, odom * dt)
                 self.publish_avg_pose()
 
     def laser_callback(self, scan: LaserScan): 
@@ -170,22 +166,17 @@ class ParticleFilter(Node):
             # get probabilities for each particle by passing scans into the sensor model and update weights 
             self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
-            # self.get_logger().info("before weights")
             if self.weights is None: 
                 self.get_logger().info("no weights")
                 return # no weights  
             
-            # self.get_logger().info("weights found")
-
-            # self.weights += 1e-10 # to prevent dividing by 0 
             if np.sum(self.weights) != 0:
                 self.weights /= np.sum(self.weights) # normalize all the weights 
 
             # resample particles 
-            self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
-            
-            # systematically resample particles - different method
-            # self.particles = self.particles[systematic_resample(self.weights)] 
+            self.particles = self.particles[
+                np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)
+            ]
 
             self.publish_avg_pose()
             

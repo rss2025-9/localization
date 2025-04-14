@@ -16,22 +16,6 @@ from sensor_msgs.msg import LaserScan
 import threading 
 import numpy.typing as npt 
 
-# Helper functions 
-def systematic_resample(weights: np.ndarray): 
-    N = len(weights)
-    positions = (np.arange(N) + np.random.uniform(0, 1)) / N
-    indexes = np.zeros(N, dtype=int)
-
-    cumulative_sum = np.cumsum(weights)
-    i, j = 0, 0
-    while i < N:
-        if positions[i] < cumulative_sum[j]:
-            indexes[i] = j
-            i += 1
-        else:
-            j += 1
-    return indexes
-
 class ParticleFilter(Node):
 
     def __init__(self):
@@ -197,9 +181,6 @@ class ParticleFilter(Node):
 
             # resample particles 
             self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
-            
-            # systematically resample particles - different method
-            # self.particles = self.particles[systematic_resample(self.weights)] 
 
             self.publish_avg_pose()
             

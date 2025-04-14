@@ -4,7 +4,8 @@ from localization.motion_model import MotionModel
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 
-import numpy as np 
+import numpy as np
+import numpy.typing as npt
 
 from rclpy.node import Node
 import rclpy
@@ -17,7 +18,6 @@ import threading
 import numpy.typing as npt 
 
 class ParticleFilter(Node):
-
     def __init__(self):
         super().__init__("particle_filter")
 
@@ -87,7 +87,7 @@ class ParticleFilter(Node):
         self.prev_time = None
 
         # initializing number of particles, particles, + their weights 
-        self.declare_parameter('num_particles', 50) 
+        self.declare_parameter('num_particles', 100) 
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
 
         self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
@@ -103,18 +103,21 @@ class ParticleFilter(Node):
         with a random spread of particles around a clicked point or pose. 
         """
 
-        # getting x, y, theta from the pose 
-        x = pose.pose.pose.position.x 
-        y = pose.pose.pose.position.y
-        theta = np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2 # calcuting yaw angle 
+        # getting x, y, yaw from the pose
+        pose: tuple = (
+            pose.pose.pose.position.x,
+            pose.pose.pose.position.y,
+            np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2
+        )
         
         # intialize particles around this with gaussian 
         if self.weights is not None: 
             with self.lock: 
-                self.particles[:, 0] = x + np.random.normal(0, 0.5, self.num_particles)
-                self.particles[:, 1] = y + np.random.normal(0, 0.5, self.num_particles)
-                self.particles[:, 2] = theta + np.random.normal(0, 0.5, self.num_particles)
-
+                self.particles = np.random.normal(
+                    pose, 
+                    [self.motion_model.std, self.motion_model.std/2, self.motion_model.std/2], 
+                    (self.num_particles, 3)
+                )
                 self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
 
     def odom_callback(self, odometry: Odometry): 
@@ -124,35 +127,31 @@ class ParticleFilter(Node):
         """
         
         # calculate the change in time (dt)
-        curr_time = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
+        curr_time: float = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
 
         if self.prev_time is None:
             self.prev_time = curr_time
             return
         
-        dt = curr_time - self.prev_time
+        dt: float = curr_time - self.prev_time
         self.prev_time = curr_time
 
         # get odometry data 
-        if self.simulation: 
-            vx = odometry.twist.twist.linear.x
-            vy = odometry.twist.twist.linear.y
-            theta = odometry.twist.twist.angular.z  # yaw once again
-        else:
-            vx = -odometry.twist.twist.linear.x
-            vy = -odometry.twist.twist.linear.y
-            theta = -odometry.twist.twist.angular.z  # yaw once again
+        odom: npt.NDArray[np.float] = np.array(
+            [odometry.twist.twist.linear.x, # vx
+             odometry.twist.twist.linear.y, # vy
+             odometry.twist.twist.angular.z]# yaw
+        )
 
-        # calculate dx, dy, dtheta
-        dx = vx * dt
-        dy = vy * dt
-        dtheta = theta * dt
-        odometry_data = np.array([dx, dy, dtheta])
+        # IRL odom flip fix.
+        if not self.simulation: 
+            odom = -odom
 
         # evaluate through motion model and update particles
         if self.weights is not None: 
             with self.lock: 
-                self.particles = self.motion_model.evaluate(self.particles, odometry_data)
+                # Evolve particles by odometry * dt.
+                self.particles = self.motion_model.evaluate(self.particles, odom * dt)
                 self.publish_avg_pose()
 
     def laser_callback(self, scan: LaserScan): 
@@ -168,23 +167,18 @@ class ParticleFilter(Node):
             # get probabilities for each particle by passing scans into the sensor model and update weights 
             self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
-            # self.get_logger().info("before weights")
             if self.weights is None: 
                 self.get_logger().info("no weights")
                 return # no weights  
             
-            # self.get_logger().info("weights found")
-
-            # self.weights += 1e-10 # to prevent dividing by 0 
             if np.sum(self.weights) != 0:
                 self.weights /= np.sum(self.weights) # normalize all the weights 
 
             # resample particles 
-            self.particles = self.particles[np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)]
-
+            self.particles = self.particles[
+                np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)
+            ]
             self.publish_avg_pose()
-            
-            self.weights.fill(1 / self.num_particles)   # resetting the weights for all particles
 
     def publish_avg_pose(self):
         # publish msg
@@ -194,10 +188,9 @@ class ParticleFilter(Node):
         # --> publish to /base_link for real car 
 
         # weighted means for x and y, circular mean for theta 
-        mean_x = np.sum(self.particles[:, 0] * self.weights)
-        mean_y = np.sum(self.particles[:, 1] * self.weights)
-        mean_theta = np.arctan2(np.sum(np.sin(self.particles[:, 2])), np.sum(np.cos(self.particles[:,2]))) 
-
+        mean: npt.NDArray[np.float] = np.sum(
+            self.particles * self.weights[:, np.newaxis], axis=1
+        )
         # publish estimated pose 
         msg = Odometry() 
         msg.header.stamp = self.get_clock().now().to_msg()
@@ -206,27 +199,13 @@ class ParticleFilter(Node):
             msg.child_frame_id = "base_link_pf"
         else: 
             msg.child_frame_id = "base_link"
-        msg.pose.pose.position.x = mean_x
-        msg.pose.pose.position.y = mean_y 
-        msg.pose.pose.orientation.z = np.sin(mean_theta / 2)
-        msg.pose.pose.orientation.w = np.cos(mean_theta / 2)
+        msg.pose.pose.position.x = mean[0]
+        msg.pose.pose.position.y = mean[1] 
+        msg.pose.pose.orientation.z = np.sin(mean[2] / 2)
+        msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
 
         self.odom_pub.publish(msg)
-
         self.publish_particles()
-
-    # def publish_particles(self):
-    #     pose_array = PoseArray()
-    #     pose_array.header.stamp = self.get_clock().now().to_msg()
-    #     pose_array.header.frame_id = "map"
-    #     for i in range(self.num_particles):
-    #         p = Pose()
-    #         p.position.x = self.particles[i, 0]
-    #         p.position.y = self.particles[i, 1]
-    #         p.orientation.z = np.sin(self.particles[i, 2] / 2)
-    #         p.orientation.w = np.cos(self.particles[i, 2] / 2)
-    #         pose_array.poses.append(p)
-    #     self.particles_pub.publish(pose_array)
 
     def publish_particles(self):
         pose_array = PoseArray()

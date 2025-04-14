@@ -10,8 +10,7 @@ class MotionModel:
         # model here.
 
         self.deterministic: bool = deterministic
-        self.noise: float = noise
-        self.std: float = np.sqrt(noise)
+        self.std: float = noise
         self.node: str = node
 
         ####################################
@@ -36,26 +35,23 @@ class MotionModel:
         """
 
         ####################################
-        
-        particle: np.ndarray
-        # Update each particle
-        for particle in particles:
-            # By calculating the rotation matrix of the particle movement.
-            rotation_matrix: np.ndarray = np.array([
-                [np.cos(particle[2]), -np.sin(particle[2])],
-                [np.sin(particle[2]), np.cos(particle[2])]]
-            )
-            # Adding noise if the motion model is not deterministic.
-            if self.deterministic:
-                noise: np.ndarray = np.zeros(odometry.shape)
-            else:
-                noise: np.ndarray = np.array([np.random.normal(0, self.noise/2), 
-                                              np.random.normal(0, self.noise/4), 
-                                              np.random.normal(0, self.noise/4)])
-            # And updating the particle.
-            particle[:2] += rotation_matrix @ (odometry[:2] + noise[:2])
-            particle[2] += odometry[2] + noise[2]
-        
+        # Gets number of particles
+        N: int = particles.shape[0]
+        # Calculates the rotation matrix for the particles.
+        sins: npt.NDArray = np.sin(particles[:, 2])
+        coss: npt.NDArray = np.cos(particles[:, 2])
+        # Gets the std we're using for the odometry noise.
+        std: float = 0.0 if self.deterministic else self.std
+
+        # Generates all odometry noise for all particles.
+        noisy_odom: npt.NDArray = np.random.normal(
+            odometry[:2], [std, std/2], size=(N, 2)
+        )
+        particles[:, 0] += noisy_odom[:, 0] * coss - noisy_odom[:, 1] * sins
+        particles[:, 1] += noisy_odom[:, 0] * sins + noisy_odom[:, 1] * coss
+        particles[:, 2] += np.random.normal(odometry[2], std/2, size=N)
+        # Normalize the angles to be between -pi and pi
+        particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
         return particles
 
         ####################################

@@ -23,6 +23,10 @@ class ParticleFilter(Node):
 
         self.declare_parameter('particle_filter_frame', "default")
         self.particle_filter_frame = self.get_parameter('particle_filter_frame').get_parameter_value().string_value
+        
+        # Visualization control for in vivo optimization.
+        self.declare_parameter('optimize_publishes', True)
+        self.optimize_publishes = self.get_parameter('optimize_publishes').get_parameter_value().bool_value
 
         #  *Important Note #1:* It is critical for your particle
         #     filter to obtain the following topic names from the
@@ -152,7 +156,6 @@ class ParticleFilter(Node):
             with self.lock: 
                 # Evolve particles by odometry * dt.
                 self.particles = self.motion_model.evaluate(self.particles, odom * dt)
-                self.publish_avg_pose()
 
     def laser_callback(self, scan: LaserScan): 
         """
@@ -171,14 +174,17 @@ class ParticleFilter(Node):
                 self.get_logger().info("no weights")
                 return # no weights  
             
-            if np.sum(self.weights) != 0:
-                self.weights /= np.sum(self.weights) # normalize all the weights 
+            if (cum_weights := np.sum(self.weights)) != 0:
+                self.weights /= cum_weights # normalize all the weights 
 
             # resample particles 
-            self.particles = self.particles[
-                np.random.choice(self.particles.shape[0], size = self.particles.shape[0], p = self.weights, replace = True)
-            ]
+            self.particles = self.particles[np.random.choice(
+                self.particles.shape[0], size = self.particles.shape[0], 
+                p = self.weights, replace = True
+            )]
             self.publish_avg_pose()
+        
+        self.publish_particles()
 
     def publish_avg_pose(self):
         # publish msg
@@ -189,7 +195,7 @@ class ParticleFilter(Node):
 
         # weighted means for x and y, circular mean for theta 
         mean: npt.NDArray[np.float] = np.sum(
-            self.particles * self.weights[:, np.newaxis], axis=1
+            self.particles * self.weights[..., np.newaxis], axis=0
         )
         # publish estimated pose 
         msg = Odometry() 
@@ -205,9 +211,12 @@ class ParticleFilter(Node):
         msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
 
         self.odom_pub.publish(msg)
-        self.publish_particles()
 
     def publish_particles(self):
+        # The publish_particles function is used to visualize the particles in RViz.
+        if self.optimize_publishes:
+            return
+
         pose_array = PoseArray()
         pose_array.header.stamp = self.get_clock().now().to_msg()
         pose_array.header.frame_id = "map"

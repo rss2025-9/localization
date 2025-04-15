@@ -23,7 +23,7 @@ class SensorModel:
         node.declare_parameter('scan_theta_discretization', 1.0)
         node.declare_parameter('scan_field_of_view', 1.0)
         node.declare_parameter('lidar_scale_to_map_scale', 1.0)
-        node.declare_parameter('lidar_samples', 100)
+        node.declare_parameter('lidar_samples', 99)
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
         node.get_logger().info(f"{self.map_topic}")

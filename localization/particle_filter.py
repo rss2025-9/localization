@@ -1,6 +1,7 @@
 from localization.sensor_model import SensorModel
 from localization.motion_model import MotionModel
 
+from std_msgs.msg import Header
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
 
@@ -68,6 +69,13 @@ class ParticleFilter(Node):
         #     "/map" frame.
 
         self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
+        self._odom_msg = Odometry(
+            header=Header(
+                stamp=self.get_clock().now().to_msg(),
+                frame_id="map",
+            ),
+            child_frame_id=self.particle_filter_frame
+        )
 
         # Initialize the models
         self.motion_model = MotionModel(self)
@@ -198,19 +206,13 @@ class ParticleFilter(Node):
             self.particles * self.weights[..., np.newaxis], axis=0
         )
         # publish estimated pose 
-        msg = Odometry() 
-        msg.header.stamp = self.get_clock().now().to_msg()
-        msg.header.frame_id = "map"
-        if self.simulation: 
-            msg.child_frame_id = "base_link_pf"
-        else: 
-            msg.child_frame_id = "base_link"
-        msg.pose.pose.position.x = mean[0]
-        msg.pose.pose.position.y = mean[1] 
-        msg.pose.pose.orientation.z = np.sin(mean[2] / 2)
-        msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
+        self._odom_msg.header.stamp = self.get_clock().now().to_msg()
+        self._odom_msg.pose.pose.position.x = mean[0]
+        self._odom_msg.pose.pose.position.y = mean[1] 
+        self._odom_msg.pose.pose.orientation.z = np.sin(mean[2] / 2)
+        self._odom_msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
 
-        self.odom_pub.publish(msg)
+        self.odom_pub.publish(self._odom_msg)
 
     def publish_particles(self):
         # The publish_particles function is used to visualize the particles in RViz.

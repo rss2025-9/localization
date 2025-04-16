@@ -23,7 +23,6 @@ class SensorModel:
         node.declare_parameter('scan_theta_discretization', 1.0)
         node.declare_parameter('scan_field_of_view', 1.0)
         node.declare_parameter('lidar_scale_to_map_scale', 1.0)
-        node.declare_parameter('lidar_samples', 99)
 
         self.map_topic = node.get_parameter('map_topic').get_parameter_value().string_value
         node.get_logger().info(f"{self.map_topic}")
@@ -33,7 +32,6 @@ class SensorModel:
         self.scan_field_of_view = node.get_parameter('scan_field_of_view').get_parameter_value().double_value
         self.lidar_scale_to_map_scale = node.get_parameter(
             'lidar_scale_to_map_scale').get_parameter_value().double_value
-        self.lidar_samples = node.get_parameter('lidar_samples').get_parameter_value().integer_value
 
         ####################################
         # Adjust these parameters - initialized to part a values for now 
@@ -170,7 +168,7 @@ class SensorModel:
         scans = (self.scan_sim.scan(particles)/scale).astype(int)
         scans = np.clip(scans, 0, self.table_width-1)
         observation = (observation[
-            np.linspace(0, observation.shape[0] - 1, self.lidar_samples, dtype = int)
+            np.linspace(0, observation.shape[0] - 1, self.num_beams_per_particle, dtype = int)
         ]/scale).astype(int)
         observation = np.clip(observation, 0, self.table_width-1)
         

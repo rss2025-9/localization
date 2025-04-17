@@ -78,7 +78,11 @@ class ParticleFilter(Node):
         )
 
         # Initialize the models
-        self.motion_model = MotionModel(self)
+        self.declare_parameter('noise', 0.07)
+        self.declare_parameter('deterministic', False)
+        noise = self.get_parameter('noise').get_parameter_value().double_value
+        deterministic = self.get_parameter('deterministic').get_parameter_value().bool_value
+        self.motion_model = MotionModel(self, noise=noise, deterministic=deterministic)
         self.sensor_model = SensorModel(self)
 
         self.get_logger().info("=============+READY+=============")

@@ -49,7 +49,7 @@ class MotionModel:
         )
         particles[:, 0] += noisy_odom[:, 0] * coss - noisy_odom[:, 1] * sins
         particles[:, 1] += noisy_odom[:, 0] * sins + noisy_odom[:, 1] * coss
-        particles[:, 2] += np.random.normal(odometry[2], std/2, size=N)
+        particles[:, 2] += np.random.normal(odometry[2], std * 0.7, size=N)
         # Normalize the angles to be between -pi and pi
         particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
         return particles

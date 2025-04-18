@@ -78,11 +78,7 @@ class ParticleFilter(Node):
         )
 
         # Initialize the models
-        self.declare_parameter('noise', 0.07)
-        self.declare_parameter('deterministic', False)
-        noise = self.get_parameter('noise').get_parameter_value().double_value
-        deterministic = self.get_parameter('deterministic').get_parameter_value().bool_value
-        self.motion_model = MotionModel(self, noise=noise, deterministic=deterministic)
+        self.motion_model = MotionModel(self)
         self.sensor_model = SensorModel(self)
 
         self.get_logger().info("=============+READY+=============")
@@ -103,7 +99,7 @@ class ParticleFilter(Node):
         self.prev_time = None
 
         # initializing number of particles, particles, + their weights 
-        self.declare_parameter('num_particles', 100) 
+        self.declare_parameter('num_particles', 200) 
         self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
 
         self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
@@ -131,7 +127,7 @@ class ParticleFilter(Node):
             with self.lock: 
                 self.particles = np.random.normal(
                     pose, 
-                    [self.motion_model.std, self.motion_model.std/2, self.motion_model.std/2], 
+                    [self.motion_model.x_std, self.motion_model.y_std, self.motion_model.theta_std], 
                     (self.num_particles, 3)
                 )
                 self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
@@ -183,7 +179,6 @@ class ParticleFilter(Node):
             self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
 
             if self.weights is None: 
-                self.get_logger().info("no weights")
                 return # no weights  
             
             if (cum_weights := np.sum(self.weights)) != 0:

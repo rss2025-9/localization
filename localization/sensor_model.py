@@ -35,15 +35,15 @@ class SensorModel:
 
         ####################################
         # Adjust these parameters - initialized to part a values for now 
-        self.alpha_hit: float = 0.70
+        self.alpha_hit: float = 0.74
         self.alpha_short: float = 0.07
         self.alpha_max: float = 0.07
-        self.alpha_rand: float = 0.16
+        self.alpha_rand: float = 0.12
 
         assert np.allclose(self.alpha_hit + self.alpha_short + self.alpha_max + self.alpha_rand, 1.0, atol=1e-6), \
             "Alpha values must sum to 1.0"
         
-        self.sigma_hit: float = 0.5
+        self.sigma_hit: float = 8.0
         self.eta: float = 1.0
         self.epsilon: float = 0.1
 

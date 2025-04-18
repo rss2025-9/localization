@@ -3,15 +3,17 @@ import numpy as np
 
 class MotionModel:
 
-    def __init__(self, node:str, noise:float=0.1, deterministic:bool=False):
+    def __init__(self, node):
         ####################################
-        # TODO
-        # Do any precomputation for the motion
-        # model here.
+        node.declare_parameter('deterministic', False)
+        node.declare_parameter('noise', 0.1)
+        self.deterministic: bool = node.get_parameter('deterministic').get_parameter_value().bool_value
+        std_coeff: float = node.get_parameter('noise').get_parameter_value().double_value if not self.deterministic else 0.0
+        #####################################
 
-        self.deterministic: bool = deterministic
-        self.std: float = noise
-        self.node: str = node
+        self.x_std: float = 2 * std_coeff
+        self.y_std: float = 1 * std_coeff
+        self.theta_std: float = np.pi / 6 * std_coeff
 
         ####################################
 
@@ -40,16 +42,14 @@ class MotionModel:
         # Calculates the rotation matrix for the particles.
         sins: npt.NDArray = np.sin(particles[:, 2])
         coss: npt.NDArray = np.cos(particles[:, 2])
-        # Gets the std we're using for the odometry noise.
-        std: float = 0.0 if self.deterministic else self.std
 
         # Generates all odometry noise for all particles.
         noisy_odom: npt.NDArray = np.random.normal(
-            odometry[:2], [std, std/2], size=(N, 2)
+            odometry[:2], [self.x_std, self.y_std], size=(N, 2)
         )
         particles[:, 0] += noisy_odom[:, 0] * coss - noisy_odom[:, 1] * sins
         particles[:, 1] += noisy_odom[:, 0] * sins + noisy_odom[:, 1] * coss
-        particles[:, 2] += np.random.normal(odometry[2], std * 0.7, size=N)
+        particles[:, 2] += np.random.normal(odometry[2], self.theta_std, size=N)
         # Normalize the angles to be between -pi and pi
         particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
         return particles

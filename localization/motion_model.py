@@ -1,21 +1,18 @@
-import numpy.typing as npt
 import numpy as np
+
 
 class MotionModel:
 
-    def __init__(self, node:str, noise:float=0.1, deterministic:bool=False):
+    def __init__(self, node):
         ####################################
-        # TODO
-        # Do any precomputation for the motion
-        # model here.
-
-        self.deterministic: bool = deterministic
-        self.std: float = noise
-        self.node: str = node
-
+        node.declare_parameter("deterministic", False)
+        self.deterministic = node.get_parameter("deterministic").get_parameter_value().bool_value
         ####################################
 
-    def evaluate(self, particles: npt.NDArray, odometry: npt.NDArray) -> npt.NDArray:
+    def rotation_matrix(self, theta):
+        return np.array([[np.cos(theta), -np.sin(theta)], [np.sin(theta), np.cos(theta)]])
+
+    def evaluate(self, particles, odometry):
         """
         Update the particles to reflect probable
         future states given the odometry data.
@@ -35,23 +32,33 @@ class MotionModel:
         """
 
         ####################################
-        # Gets number of particles
-        N: int = particles.shape[0]
-        # Calculates the rotation matrix for the particles.
-        sins: npt.NDArray = np.sin(particles[:, 2])
-        coss: npt.NDArray = np.cos(particles[:, 2])
-        # Gets the std we're using for the odometry noise.
-        std: float = 0.0 if self.deterministic else self.std
 
-        # Generates all odometry noise for all particles.
-        noisy_odom: npt.NDArray = np.random.normal(
-            odometry[:2], [std, std/2], size=(N, 2)
-        )
-        particles[:, 0] += noisy_odom[:, 0] * coss - noisy_odom[:, 1] * sins
-        particles[:, 1] += noisy_odom[:, 0] * sins + noisy_odom[:, 1] * coss
-        particles[:, 2] += np.random.normal(odometry[2], std * 0.7, size=N)
-        # Normalize the angles to be between -pi and pi
-        particles[:, 2] = np.arctan2(np.sin(particles[:, 2]), np.cos(particles[:, 2]))
-        return particles
+        dx, dy, dtheta = odometry
+
+        x_std = .05
+        y_std = .01
+        thetastd = np.pi / 30
+
+        particles = np.array(particles)
+        ret = np.empty(particles.shape)
+
+        count = 0
+
+        for prtcl in particles:
+            xnoise = x_std * np.random.normal() if not self.deterministic else 0
+            ynoise = y_std * np.random.normal() if not self.deterministic else 0
+            thetanoise = thetastd * np.random.normal() if not self.deterministic else 0
+
+            x, y, theta = prtcl[0], prtcl[1], prtcl[2]
+            prev_trans_vec = np.array([[x], [y]])
+            rot = self.rotation_matrix(theta)
+
+            new_trans_vec = np.dot(rot, np.array([[dx + xnoise], [dy + ynoise]])) + prev_trans_vec
+            new_row = np.append(new_trans_vec, theta + (dtheta + thetanoise))
+            ret[count] = new_row
+
+            count += 1
+
+        return ret
 
         ####################################

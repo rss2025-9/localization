@@ -1,33 +1,65 @@
-from localization.sensor_model import SensorModel
-from localization.motion_model import MotionModel
+from localization_soln.sensor_model import SensorModel
+from localization_soln.motion_model import MotionModel
 
-from std_msgs.msg import Header
+from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry
-from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, Point, Quaternion
+from geometry_msgs.msg import PoseWithCovarianceStamped, PoseArray, Pose, TransformStamped
 
 import numpy as np
-import numpy.typing as npt
+from tf_transformations import quaternion_from_euler, euler_from_quaternion
+import tf2_ros
+
+import threading
+
+from scipy.stats import circmean
 
 from rclpy.node import Node
 import rclpy
 
 assert rclpy
 
-from sensor_msgs.msg import LaserScan
-
-import threading 
-import numpy.typing as npt 
 
 class ParticleFilter(Node):
-    def __init__(self):
+
+    def __init__(self, log_name=""):
         super().__init__("particle_filter")
 
-        self.declare_parameter('particle_filter_frame', "default")
+        self.declare_parameter('particle_filter_frame', "base_link_pf")
+        self.declare_parameter('num_particles', 200)
+        self.declare_parameter('publish_odom', True)
+        self.declare_parameter('angle_step', 1)
+
+        self.declare_parameter('odom_topic', "/odom")
+        self.declare_parameter('scan_topic', "/scan")
+
         self.particle_filter_frame = self.get_parameter('particle_filter_frame').get_parameter_value().string_value
-        
-        # Visualization control for in vivo optimization.
-        self.declare_parameter('optimize_publishes', True)
-        self.optimize_publishes = self.get_parameter('optimize_publishes').get_parameter_value().bool_value
+        self.MAX_PARTICLES = self.get_parameter('num_particles').get_parameter_value().integer_value
+        self.PUBLISH_ODOM = self.get_parameter('publish_odom').get_parameter_value().bool_value
+        self.ANGLE_STEP = self.get_parameter('angle_step').get_parameter_value().integer_value
+
+        self.initiated = False
+        self.TEST_MODE = True
+        self.SAMPLE_RATE = .1
+
+        self.tfBuffer = tf2_ros.Buffer()
+        self.listener = tf2_ros.TransformListener(self.tfBuffer, self)
+        self.best_p = -1
+
+        # Get parameters
+        self.num_particles = 1000.0
+        self.weights = np.ones(
+            int(self.num_particles)) / self.num_particles  # start with uniform weight for each particle
+        self.particles = np.zeros((int(self.num_particles), 3))
+        self.lock = threading.Lock()
+
+        # Initialize publishers/subscribers
+
+        # Initialize the models
+        self.motion_model = MotionModel(self)
+        self.sensor_model = SensorModel(self)
+
+        self.prev_time = self.T0 = self.prev_log_time = self.get_clock().now()
+        self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
 
         #  *Important Note #1:* It is critical for your particle
         #     filter to obtain the following topic names from the
@@ -36,12 +68,21 @@ class ParticleFilter(Node):
         #     a twist component, you will only be provided with the
         #     twist component, so you should rely only on that
         #     information, and *not* use the pose component.
-        
-        self.declare_parameter('odom_topic', "/odom")
-        self.declare_parameter('scan_topic', "/scan")
-
         scan_topic = self.get_parameter("scan_topic").get_parameter_value().string_value
         odom_topic = self.get_parameter("odom_topic").get_parameter_value().string_value
+
+        self.estimate_scan_pub = self.create_publisher(LaserScan, "/estimate_scan", 1)
+
+        #  *Important Note #3:* You must publish your pose estimate to
+        #     the following topic. In particular, you must use the
+        #     pose field of the Odometry message. You do not need to
+        #     provide the twist part of the Odometry message. The
+        #     odometry you publish here should be with respect to the
+        #     "/map" frame.
+
+        self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
+
+        self.particles_pub = self.create_publisher(PoseArray, "/debug", 1)
 
         self.laser_sub = self.create_subscription(LaserScan, scan_topic,
                                                   self.laser_callback,
@@ -61,187 +102,180 @@ class ParticleFilter(Node):
                                                  self.pose_callback,
                                                  1)
 
-        #  *Important Note #3:* You must publish your pose estimate to
-        #     the following topic. In particular, you must use the
-        #     pose field of the Odometry message. You do not need to
-        #     provide the twist part of the Odometry message. The
-        #     odometry you publish here should be with respect to the
-        #     "/map" frame.
-
-        self.odom_pub = self.create_publisher(Odometry, "/pf/pose/odom", 1)
-        self._odom_msg = Odometry(
-            header=Header(
-                stamp=self.get_clock().now().to_msg(),
-                frame_id="map",
-            ),
-            child_frame_id=self.particle_filter_frame
-        )
-
-        # Initialize the models
-        self.declare_parameter('noise', 0.07)
-        self.declare_parameter('deterministic', False)
-        noise = self.get_parameter('noise').get_parameter_value().double_value
-        deterministic = self.get_parameter('deterministic').get_parameter_value().bool_value
-        self.motion_model = MotionModel(self, noise=noise, deterministic=deterministic)
-        self.sensor_model = SensorModel(self)
-
         self.get_logger().info("=============+READY+=============")
 
-        # Implement the MCL algorithm
-        # using the sensor model and the motion model
-        #
-        # Make sure you include some way to initialize
-        # your particles, ideally with some sort
-        # of interactive interface in rviz
-        #
-        # Publish a transformation frame between the map
-        # and the particle_filter_frame.
-
-        # visualizing particles
-        self.particles_pub = self.create_publisher(PoseArray, "/particles", 1)
-
-        self.prev_time = None
-
-        # initializing number of particles, particles, + their weights 
-        self.declare_parameter('num_particles', 100) 
-        self.num_particles = self.get_parameter('num_particles').get_parameter_value().integer_value
-
-        self.particles = np.zeros((self.num_particles, 3)) # (x, y, theta)  
-        self.weights = np.ones(self.num_particles)/self.num_particles 
-
-        self.lock = threading.Lock()
-
-        self.simulation = False
-
-    def pose_callback(self, pose: PoseWithCovarianceStamped): 
+    def getOdometryMsg(self, debug=True):
         """
-        use rviz /initial_pose for initializing the particles and a guess of where the robot's location is 
-        with a random spread of particles around a clicked point or pose. 
+        Uses self.particles to get pose prediction. Puts prediction in Odometry message.
+
+        If debug, then also publish the particles as PoseArray msg. 
         """
 
-        # getting x, y, yaw from the pose
-        pose: tuple = (
-            pose.pose.pose.position.x,
-            pose.pose.pose.position.y,
-            np.arctan2(pose.pose.pose.orientation.z, pose.pose.pose.orientation.w) * 2
-        )
-        
-        # intialize particles around this with gaussian 
-        if self.weights is not None: 
-            with self.lock: 
-                self.particles = np.random.normal(
-                    pose, 
-                    [self.motion_model.std, self.motion_model.std/2, self.motion_model.std/2], 
-                    (self.num_particles, 3)
-                )
-                self.weights.fill(1 / self.num_particles) # weights set uniformly across all particles for initialization 
+        now = self.get_clock().now()
 
-    def odom_callback(self, odometry: Odometry): 
+        x_avg, y_avg = np.mean(self.particles[:, :2], axis=0)
+        theta_avg = circmean(self.particles[:, 2])
+        msg = Odometry()
+        msg.pose.pose.position.x, msg.pose.pose.position.y = x_avg, y_avg
+        msg.pose.pose.orientation.x, msg.pose.pose.orientation.y, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w, = quaternion_from_euler(
+            0, 0, theta_avg)
+        msg.header.frame_id = '/map'
+        msg.header.stamp = now.to_msg()
+
+        # get the spread of the particles (N x 3)
+        if self.initiated and self.not_converged:
+            std_pre = np.std(self.particles, axis=0)
+
+            std = np.sqrt(np.sum(std_pre[:2] ** 2))  # only care about x,y
+
+            if .01 < std < 0.2 and self.best_p > 1e-78:
+                delta_t = ((now - self.start_time).nanoseconds) / 1e9
+
+                self.not_converged = False
+
+        ############# We want to compare the base_link to the estimate pose to get the error of our implementation, but we're running into issues with base_link not being a valid name
+        # transform = self.tfBuffer.lookup_transform('base_link', 'map', rclpy.time.Time())
+
+        # ground truth pose w.r.t. map coordinate frame
+
+        # write data to file
+        # publish transform from map to base_link_pf
+        transform = TransformStamped()
+        transform.header.stamp = now.to_msg()
+        transform.header.frame_id = "/map"
+        transform.child_frame_id = self.particle_filter_frame
+
+        transform.transform.translation.x = x_avg
+        transform.transform.translation.y = y_avg
+        transform.transform.translation.z = 0.0
+        transform.transform.rotation.x, transform.transform.rotation.y, transform.transform.rotation.z, transform.transform.rotation.w = quaternion_from_euler(
+            0, 0, theta_avg)
+        self.tf_broadcaster.sendTransform(transform)
+
+        if debug:
+            array = PoseArray()
+            array.header.frame_id = '/map'
+            array.poses = []
+            for particle in self.particles:
+                pose = Pose()
+                pose.position.x, pose.position.y = particle[:2]
+                pose.orientation.x, pose.orientation.y, pose.orientation.z, pose.orientation.w = quaternion_from_euler(
+                    0, 0, particle[2])
+                array.poses.append(pose)
+
+            self.particles_pub.publish(array)
+
+        return msg
+
+    def laser_callback(self, scan):
         """
-        process odometry data to pass into motion model
-        only rely on twist and not pose 
+        update + resample
         """
-        
-        # calculate the change in time (dt)
-        curr_time: float = odometry.header.stamp.sec + odometry.header.stamp.nanosec * 1e-9
-
-        if self.prev_time is None:
-            self.prev_time = curr_time
-            return
-        
-        dt: float = curr_time - self.prev_time
-        self.prev_time = curr_time
-
-        # get odometry data 
-        odom: npt.NDArray[np.float] = np.array(
-            [odometry.twist.twist.linear.x, # vx
-             odometry.twist.twist.linear.y, # vy
-             odometry.twist.twist.angular.z]# yaw
-        )
-
-        # IRL odom flip fix.
-        if not self.simulation: 
-            odom = -odom
-
-        # evaluate through motion model and update particles
-        if self.weights is not None: 
-            with self.lock: 
-                # Evolve particles by odometry * dt.
-                self.particles = self.motion_model.evaluate(self.particles, odom * dt)
-
-    def laser_callback(self, scan: LaserScan): 
-        """
-        process scan data to pass into sensor model 
-        and resample particles based on sensor model probabilities, numpy.random.choice can be useful 
-        """
-        
-        scan_ranges = np.array(scan.ranges)
-
-        # self.get_logger().info("before lock")
-        with self.lock: 
-            # get probabilities for each particle by passing scans into the sensor model and update weights 
-            self.weights = self.sensor_model.evaluate(self.particles, scan_ranges)
-
-            if self.weights is None: 
-                self.get_logger().info("no weights")
-                return # no weights  
-            
-            if (cum_weights := np.sum(self.weights)) != 0:
-                self.weights /= cum_weights # normalize all the weights 
-
-            # resample particles 
-            self.particles = self.particles[np.random.choice(
-                self.particles.shape[0], size = self.particles.shape[0], 
-                p = self.weights, replace = True
-            )]
-            self.publish_avg_pose()
-        
-        self.publish_particles()
-
-    def publish_avg_pose(self):
-        # publish msg
-        # determine "Average" particle pose and publish 
-        # publishes estimated pose as a transformation between the /map frame and a frame for the expected car's base link 
-        # --> publish to /base_link_pf for simulator 
-        # --> publish to /base_link for real car 
-
-        # weighted means for x and y, circular mean for theta 
-        mean: npt.NDArray[np.float] = np.sum(
-            self.particles * self.weights[..., np.newaxis], axis=0
-        )
-        # publish estimated pose 
-        self._odom_msg.header.stamp = self.get_clock().now().to_msg()
-        self._odom_msg.pose.pose.position.x = mean[0]
-        self._odom_msg.pose.pose.position.y = mean[1] 
-        self._odom_msg.pose.pose.orientation.z = np.sin(mean[2] / 2)
-        self._odom_msg.pose.pose.orientation.w = np.cos(mean[2] / 2)
-
-        self.odom_pub.publish(self._odom_msg)
-
-    def publish_particles(self):
-        # The publish_particles function is used to visualize the particles in RViz.
-        if self.optimize_publishes:
+        if not self.sensor_model.map_set:
             return
 
-        pose_array = PoseArray()
-        pose_array.header.stamp = self.get_clock().now().to_msg()
-        pose_array.header.frame_id = "map"
-        
-        # Vectorized computations for positions and orientations
-        half_thetas: npt.NDArray = self.particles[:, 2] / 2
-        sin_half: npt.NDArray = np.sin(half_thetas)
-        cos_half: npt.NDArray = np.cos(half_thetas)
-        
-        # Use list comprehension to create Pose messages for each particle
-        pose_array.poses = [
-            Pose(
-                position=Point(x=self.particles[i, 0], y=self.particles[i, 1], z=0.0),
-                orientation=Quaternion(x=0.0, y=0.0, z=sin_half[i], w=cos_half[i])
-            )
-            for i in range(self.num_particles)
-        ]
-        
-        self.particles_pub.publish(pose_array)
+        now = self.get_clock().now()
+
+        self.lock.acquire()
+        # Update Step (distribution over the self.num_particles points)
+
+        self.unnormed_weights = self.sensor_model.evaluate(self.particles, scan.ranges)  # P(z|x) 
+        self.best_p = max(self.unnormed_weights)
+        self.weights = self.unnormed_weights / np.sum(self.unnormed_weights)
+
+        # Resampling
+        idxs = np.random.choice(int(self.num_particles), int(self.num_particles), p=self.weights)
+        self.particles = self.particles[idxs]
+        # will sample from 0->num_particles with weights defined as self.weights
+
+        # publish average pose
+        msg = self.getOdometryMsg()
+        self.odom_pub.publish(msg)
+
+        estimate_particle = np.array([msg.pose.pose.position.x, msg.pose.pose.position.y,
+                                      euler_from_quaternion(
+                                          [0, 0, msg.pose.pose.orientation.z, msg.pose.pose.orientation.w])[2]])
+        scan_new = self.sensor_model.scan_sim.scan(np.array([estimate_particle]))
+        scan_msg = LaserScan()
+        scan_msg.header.frame_id = self.particle_filter_frame.lstrip("/")
+        scan_msg.header.stamp = now.to_msg()
+        scan_msg.angle_min = scan.angle_min
+        scan_msg.angle_max = scan.angle_max
+        scan_msg.angle_increment = scan.angle_increment
+        scan_msg.time_increment = scan.time_increment
+        scan_msg.range_min = scan.range_min
+        scan_msg.range_max = scan.range_max
+        scan_msg.scan_time = scan.scan_time
+
+        scan_msg.ranges = scan_new[0].tolist()
+
+        self.estimate_scan_pub.publish(scan_msg)
+
+        self.prev_time = now
+
+        self.lock.release()
+
+    def odom_callback(self, odom):
+        """
+        Prediction Step
+        """
+
+        if not self.sensor_model.map_set:
+            return
+
+        self.lock.acquire()
+
+        now = self.get_clock().now()
+
+        vx, vy = odom.twist.twist.linear.x, odom.twist.twist.linear.y,
+        wz = odom.twist.twist.angular.z
+
+        dt = (now - self.prev_time).nanoseconds / 1e9
+
+        dx, dy = vx * dt, vy * dt
+        dtheta = wz * dt
+
+        delta_x = [dx, dy, dtheta]
+
+        self.prev_time = now
+
+        self.particles = self.motion_model.evaluate(self.particles, delta_x)
+
+        msg = self.getOdometryMsg()
+        self.odom_pub.publish(msg)
+
+        self.lock.release()
+
+    def pose_callback(self, pose):
+        """
+        This is done whenever the green arrow is placed down in RVIZ. 
+
+        pose: guess from YOU (?)
+
+        Sample around the pose (x+eps_x, y+eps_y, theta+eps_theta) eps_? ~  N(0,sigma)
+        """
+        if not self.sensor_model.map_set:
+            return
+        self.lock.acquire()
+
+        std_trans = 1.
+        std_theta = np.pi / 4
+        x, y = pose.pose.pose.position.x, pose.pose.pose.position.y
+        theta = euler_from_quaternion(
+            [pose.pose.pose.orientation.x, pose.pose.pose.orientation.y, pose.pose.pose.orientation.z,
+             pose.pose.pose.orientation.w])[-1]
+
+        x_samples = (std_trans * np.random.randn(int(self.num_particles)) + x)[:, None]
+        y_samples = (std_trans * np.random.randn(int(self.num_particles)) + y)[:, None]
+
+        theta_samples = (std_theta * np.random.randn(int(self.num_particles)) + theta)[:, None]
+
+        self.particles = np.hstack((x_samples, y_samples, theta_samples))
+        msg = self.getOdometryMsg()
+        self.odom_pub.publish(msg)
+
+        self.lock.release()
+
 
 def main(args=None):
     rclpy.init(args=args)

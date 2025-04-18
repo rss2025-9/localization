@@ -1,5 +1,5 @@
-from localization_soln.sensor_model import SensorModel
-from localization_soln.motion_model import MotionModel
+from sensor_model import SensorModel
+from motion_model import MotionModel
 
 from sensor_msgs.msg import LaserScan
 from nav_msgs.msg import Odometry

@@ -13,7 +13,7 @@ class MotionModel:
 
         self.x_std: float = 2 * std_coeff
         self.y_std: float = 1 * std_coeff
-        self.theta_std: float = np.pi / 6 * std_coeff
+        self.theta_std: float = np.radians(15) * std_coeff
 
         ####################################
 
